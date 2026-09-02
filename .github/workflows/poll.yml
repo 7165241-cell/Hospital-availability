@@ -1,9 +1,11 @@
-name: bot-poll-on-demand
+name: bot-tick
 
-# עונה לבקשות "עדכון עכשיו" ששלחו לבוט.
-# רץ כל 5 דקות — GitHub עלול לעכב את הריצות בשעות עומס.
+# רץ כל 5 דקות ועושה שני דברים:
+#   1. bot_poll.py    — עונה למי ששלח "עדכון" לבוט
+#   2. watch_sheet.py — אם הגיליון השתנה, שולח לוח מעודכן לערוץ (וגם פוסט יומי בבוקר)
+# GitHub עלול לעכב ריצות מתוזמנות בעומס (בפועל כל 5–15 דק').
 # דורש שה-repo יהיה Public כדי לא לאכול את דקות ה-Actions החינמיות.
-# ב-repo פרטי — לשנות ל-"*/30 * * * *".
+# ב-repo פרטי — לשנות את ה-cron ל-"*/15 * * * *".
 
 on:
   schedule:
@@ -11,19 +13,40 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: bot-poll
+  group: bot-tick
   cancel-in-progress: false
 
+permissions:
+  contents: write
+
 jobs:
-  poll:
+  tick:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: מענה לבקשות עדכון
+
+      - name: מענה לבקשות "עדכון עכשיו"
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           TZ: Asia/Jerusalem
         run: python bot_poll.py
+
+      - name: בדיקת שינוי בגיליון
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          TZ: Asia/Jerusalem
+        run: python watch_sheet.py
+
+      - name: שמירת מצב הגיליון
+        run: |
+          git add state/
+          if ! git diff --cached --quiet; then
+            git config user.name "sheet-watcher"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "עדכון מצב הגיליון [skip ci]"
+            git push
+          fi
