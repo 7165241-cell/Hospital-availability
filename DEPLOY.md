@@ -1,98 +1,45 @@
-# פריסה חינמית — ערוץ טלגרם + GitHub Actions
+# איך זה עובד (פרוס ופעיל)
 
-השיטה היחידה שהיא **חינם לגמרי, בלי כרטיס אשראי, ויציבה**:
-GitHub מריץ סקריפט קטן פעם ביום ב-08:15 (שעון ישראל), שקורא את הגיליון
-ושולח את הלוח לערוץ טלגרם שכולם מצטרפים אליו.
+repo: **github.com/7165241-cell/Hospital-availability**
+ערוץ: **"זמינות בתי חולים"** (פרטי, `CHANNEL_ID = -1004297375221`)
+בוט: **@hospital_availability_bot**
 
-בלי מחשב שדולק, בלי שרת.
-
-מה מפסידים: אין כפתור "עדכון עכשיו" — רק הפוסט היומי (אפשר להוסיף עוד שעות ביום).
+הכול רץ על השרתים של GitHub — לא צריך מחשב שדולק.
 
 ---
 
-## שלב 1 — יצירת ערוץ והוספת הבוט כמנהל
+## מה רץ
 
-1. בטלגרם: תפריט ➜ **ערוץ חדש** (New Channel). שם: `זמינות מד"א ירושלים`.
-2. סוג הערוץ: **ציבורי**, ותנו כתובת קצרה, למשל `mda_jlm_availability`.
-   (הכתובת הזו = הקישור להצטרפות: `t.me/mda_jlm_availability`)
-3. אחרי היצירה: הגדרות הערוץ ➜ **מנהלים** ➜ **הוספת מנהל** ➜ מחפשים
-   `@hospital_availability_bot` ומוסיפים. מספיקה הרשאת **"פרסום הודעות"**.
+### `bot-tick` (`.github/workflows/poll.yml`) — כל 5 דקות
+1. **`bot_poll.py`** — כל מי ששולח הודעה ל-@hospital_availability_bot מקבל בחזרה
+   מיד את הלוח העדכני ("עדכון עכשיו").
+2. **`watch_sheet.py`** — משווה את הגיליון למצב הקודם:
+   * השתנה → שולח מיד לוח מעודכן לערוץ עם כותרת "🔔 עדכון בלוח הזמינות".
+   * לא השתנה, אבל עברו 20+ שעות מהפוסט האחרון וכבר בוקר → שולח "עדכון יומי"
+     (אישור שהלוח בתוקף).
+3. שומר את המצב ב-`state/board_state.json` (commit אוטומטי ב-repo).
 
-> אם עדיף ערוץ פרטי: ה-`CHANNEL_ID` יהיה מספר (מוסבר בשלב 3).
-
----
-
-## שלב 2 — יצירת ה-repo בגיטהאב
-
-1. github.com ➜ **New repository** ➜ שם `mda-availability-bot` ➜ Private ➜ Create.
-2. מעלים לתוכו את **תוכן** התיקייה הזו כך שהקבצים יהיו בשורש ה-repo
-   (`bot.py`, `board.py`, `daily_post.py`, `requirements.txt`, `.github/…`).
-
-   הכי פשוט מ-PowerShell בתוך התיקייה:
-
-   ```powershell
-   git init
-   git add board.py daily_post.py bot.py requirements.txt README.md DEPLOY.md .github .gitignore .env.example
-   git commit -m "בוט זמינות מד״א ירושלים"
-   git branch -M main
-   git remote add origin https://github.com/<שם-המשתמש>/mda-availability-bot.git
-   git push -u origin main
-   ```
-
-   ⚠️ אל תעלו את `.env` ואת `subscribers.db` — הם כבר ב-`.gitignore`.
+### `keepalive` (`.github/workflows/keepalive.yml`) — פעם בחודש
+commit ריק, כדי ש-GitHub לא ישבית את ה-workflows אחרי 60 יום. אוטומטי לגמרי.
 
 ---
 
-## שלב 3 — הגדרת ה-Secrets
+## מה צריך לוודא פעם אחת
 
-ב-repo: **Settings ➜ Secrets and variables ➜ Actions ➜ New repository secret**.
-מוסיפים שניים:
-
-| שם | ערך |
-|----|-----|
-| `BOT_TOKEN` | הטוקן מ-@BotFather (`8861580099:AAH…`) |
-| `CHANNEL_ID` | `@mda_jlm_availability` (או המספר `-100…` לערוץ פרטי) |
-
-**איך משיגים מספר של ערוץ פרטי:** מוסיפים לערוץ את `@getidsbot` לרגע,
-הוא שולח מספר בסגנון `-1001234567890`, מסירים אותו, ומשתמשים במספר.
+* **ה-repo חייב להיות Public** — ריצה כל 5 דק' אוכלת את דקות ה-Actions של repo פרטי.
+  Settings ➜ General ➜ למטה ➜ Change visibility ➜ Public.
+  (אין סודות בקוד. `BOT_TOKEN` נשאר מוצפן ב-Secrets גם ב-repo ציבורי.)
+  להשאיר פרטי? לשנות ב-`poll.yml` את `*/5` ל-`*/15`.
+* **Secrets** (Settings ➜ Secrets and variables ➜ Actions): `BOT_TOKEN`, `CHANNEL_ID`.
+* **להצמיד בערוץ**: *"📩 לעדכון מיידי — שלחו הודעה ל-@hospital_availability_bot"*.
 
 ---
 
-## שלב 4 — בדיקה
+## הערות
 
-ב-repo: **Actions ➜ daily-availability-post ➜ Run workflow** (משאירים "force" מסומן).
-תוך דקה אמור להופיע פוסט בערוץ. אם לא — פותחים את הריצה ורואים את השגיאה בלוג.
-
-מכאן זה אוטומטי כל בוקר ב-08:15.
-
----
-
-## "עדכון עכשיו" — מענה לבקשות (poll.yml)
-
-`bot_poll.py` רץ כל 5 דקות ב-GitHub. מי ששולח **הודעה כלשהי לבוט**
-`@hospital_availability_bot` (בצ'אט פרטי) מקבל בחזרה את הלוח העדכני של אותו רגע.
-(גם המילה "עדכון" בקבוצת דיון מקושרת לערוץ עובדת.)
-
-* מומלץ להצמיד (pin) בערוץ הודעה: *"לעדכון מיידי — שלחו הודעה ל-@hospital_availability_bot"*.
-* ⚠️ הריצה כל 5 דקות אוכלת דקות Actions. **צריך שה-repo יהיה Public**
-  (אין סודות בקוד; ה-`BOT_TOKEN` נשאר מוצפן ב-Secrets גם ב-repo ציבורי).
-  לשינוי: **Settings ➜ General ➜ Change visibility ➜ Public**.
-* אם רוצים להשאיר Private: לפתוח את `.github/workflows/poll.yml` ולשנות
-  `*/5` ל-`*/30` (מענה יגיע תוך ~30–40 דק').
-* GitHub מעכב ריצות מתוזמנות בעומס — בפועל המענה יכול לקחת 5–15 דק'.
-
-## keepalive
-
-`keepalive.yml` עושה commit ריק פעם בחודש כדי ש-GitHub לא ישבית את
-ה-workflows המתוזמנים אחרי 60 יום. אין מה לעשות עם זה — זה אוטומטי.
-
-## הערות ומגבלות
-
-* ריצות מתוזמנות ב-GitHub עלולות להתעכב ב-5–15 דקות בשעות עומס — לא מדויק לשנייה.
-* GitHub **משבית** workflow מתוזמן אחרי 60 יום בלי פעילות ב-repo — מטופל
-  אוטומטית ע"י `keepalive.yml`.
-* רוצים עדכון גם בצהריים ובערב? מוסיפים שורות `cron` ב-`.github/workflows/daily.yml`
-  ומעדכנים את הבדיקה ב-`daily_post.py` (או פשוט מריצים תמיד עם `FORCE=1`).
-* הבוט האינטראקטיבי (`bot.py`, עם כפתורים ו-`/start`) עדיין נמצא ב-repo והוא
-  אופציונלי — הוא דורש מחשב/שרת שדולק תמיד עם גישה לטלגרם, ולכן לא חלק
-  מהפריסה החינמית.
+* ריצות מתוזמנות ב-GitHub מתעכבות לפעמים 5–15 דק' בעומס — לא מדויק לשנייה.
+* להריץ ידנית לבדיקה: Actions ➜ bot-tick ➜ Run workflow.
+* `daily_post.py` — שליחה ידנית חד-פעמית של הלוח לערוץ (לא בשימוש אוטומטי).
+* `bot.py` — הבוט האינטראקטיבי המלא (כפתורים, `/start`, מנוי). אופציונלי,
+  דורש מחשב/שרת שדולק תמיד. לא חלק מהפריסה.
+* אם צריך להחליף טוקן: `/token` ב-@BotFather, ואז לעדכן את ה-Secret `BOT_TOKEN`.
