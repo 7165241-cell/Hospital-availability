@@ -1,0 +1,24 @@
+name: keepalive
+
+# GitHub משבית workflow מתוזמן אחרי 60 יום בלי פעילות ב-repo.
+# הריצה הזו עושה commit ריק פעם בחודש כדי לשמור על הכול פעיל.
+
+on:
+  schedule:
+    - cron: "17 3 1 * *"   # ה-1 בכל חודש, 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: commit ריק
+        run: |
+          git config user.name "keepalive-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "keepalive [skip ci]"
+          git push

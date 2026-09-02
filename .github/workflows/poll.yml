@@ -1,0 +1,29 @@
+name: bot-poll-on-demand
+
+# עונה לבקשות "עדכון עכשיו" ששלחו לבוט.
+# רץ כל 5 דקות — GitHub עלול לעכב את הריצות בשעות עומס.
+# דורש שה-repo יהיה Public כדי לא לאכול את דקות ה-Actions החינמיות.
+# ב-repo פרטי — לשנות ל-"*/30 * * * *".
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: bot-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: מענה לבקשות עדכון
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          TZ: Asia/Jerusalem
+        run: python bot_poll.py
