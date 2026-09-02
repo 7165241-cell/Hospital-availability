@@ -1,0 +1,33 @@
+name: daily-availability-post
+
+# שולח את לוח הזמינות לערוץ הטלגרם פעם ביום בבוקר.
+# cron של GitHub הוא ב-UTC ובלי שעון קיץ, לכן מריצים בשתי שעות
+# ו-daily_post.py שולח רק כשהשעה בישראל היא 08:xx.
+
+on:
+  schedule:
+    - cron: "15 5 * * *"   # 08:15 בישראל כששעון קיץ פעיל (UTC+3)
+    - cron: "15 6 * * *"   # 08:15 בישראל כששעון חורף פעיל (UTC+2)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "שליחה מיידית (בלי בדיקת שעה)"
+        type: boolean
+        default: true
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: שליחת הלוח לערוץ
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          TZ: Asia/Jerusalem
+          DAILY_HOUR: "8"
+          FORCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '1' || '0' }}
+        run: python daily_post.py
