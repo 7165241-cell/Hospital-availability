@@ -9,6 +9,7 @@ import csv
 import html
 import io
 import os
+import time
 import urllib.request
 from datetime import datetime
 
@@ -42,9 +43,20 @@ def sheet_link() -> str:
     return f"https://docs.google.com/spreadsheets/d/{sheet_id()}/edit"
 
 
-def fetch_csv_sync(timeout: int = 20) -> str:
-    with urllib.request.urlopen(csv_url(), timeout=timeout) as resp:
-        return resp.read().decode("utf-8", errors="replace")
+def fetch_csv_sync(timeout: int = 20, attempts: int = 3) -> str:
+    last_err: Exception | None = None
+    for i in range(attempts):
+        try:
+            req = urllib.request.Request(
+                csv_url(), headers={"User-Agent": "Mozilla/5.0 (availability-bot)"}
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read().decode("utf-8", errors="replace")
+        except Exception as err:  # noqa: BLE001
+            last_err = err
+            if i < attempts - 1:
+                time.sleep(2 * (i + 1))
+    raise RuntimeError(f"failed to fetch sheet after {attempts} attempts: {last_err}")
 
 
 def render_board(raw_csv: str) -> str:

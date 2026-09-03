@@ -29,12 +29,14 @@ jobs:
           python-version: "3.12"
 
       - name: מענה לבקשות "עדכון עכשיו"
+        continue-on-error: true
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           TZ: Asia/Jerusalem
         run: python bot_poll.py
 
       - name: בדיקת שינוי בגיליון
+        if: always()
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
@@ -42,6 +44,7 @@ jobs:
         run: python watch_sheet.py
 
       - name: שמירת מצב הגיליון
+        if: always()
         run: |
           git add state/
           if ! git diff --cached --quiet; then

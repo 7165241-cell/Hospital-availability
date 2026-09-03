@@ -38,6 +38,8 @@ def tg(method: str, **params) -> dict:
             return json.loads(body)
         except ValueError:
             return {"ok": False, "error_code": err.code, "description": body}
+    except urllib.error.URLError as err:
+        return {"ok": False, "error_code": 0, "description": f"network: {err.reason}"}
 
 
 def wants_update(msg: dict) -> bool:
@@ -51,12 +53,22 @@ def wants_update(msg: dict) -> bool:
 
 def main() -> int:
     now = datetime.now(ZoneInfo(os.environ.get("TZ", "Asia/Jerusalem")))
+    tg("deleteWebhook")  # ליתר ביטחון — הבוט עובד ב-polling, לא webhook
     res = tg("getUpdates", timeout=0, allowed_updates=json.dumps(["message"]))
     if not res.get("ok"):
-        print("getUpdates error:", json.dumps(res, ensure_ascii=False))
-        return 1
+        code = res.get("error_code")
+        msg = json.dumps(res, ensure_ascii=False)
+        if code == 409:
+            # מופע אחר של הבוט מושך עדכונים (למשל bot.py מקומי) — לא שגיאה אמיתית
+            print("getUpdates conflict — another bot instance is polling. skipping.")
+            return 0
+        if code in (401, 404):
+            print("getUpdates auth error:", msg)
+            return 1
+        print("getUpdates transient error (ignored):", msg)
+        return 0
 
-    updates = res["result"]
+    updates = res.get("result") or []
     if not updates:
         print("no pending updates")
         return 0
