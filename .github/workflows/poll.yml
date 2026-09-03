@@ -45,11 +45,12 @@ jobs:
 
       - name: שמירת מצב הגיליון
         if: always()
+        continue-on-error: true
         run: |
           git add state/
           if ! git diff --cached --quiet; then
             git config user.name "sheet-watcher"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git commit -m "עדכון מצב הגיליון [skip ci]"
-            git push
+            git push || echo "push נכשל (לא קריטי, ינסה שוב בריצה הבאה)"
           fi

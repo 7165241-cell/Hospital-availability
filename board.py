@@ -27,6 +27,18 @@ SECTION_HEADERS = {
 TITLE = 'זמינות פגיות, מצנתרי מוח ותחומים נוספים\nמד"א ירושלים'
 
 
+def note(msg: str) -> None:
+    """מדפיס לוג וגם כותב לסיכום הריצה של GitHub (נראה בעמוד ה-Action)."""
+    print(msg, flush=True)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        try:
+            with open(summary, "a", encoding="utf-8") as fh:
+                fh.write(msg.rstrip() + "\n\n")
+        except OSError:
+            pass
+
+
 def sheet_id() -> str:
     return os.environ.get("SHEET_ID", DEFAULT_SHEET_ID).strip()
 

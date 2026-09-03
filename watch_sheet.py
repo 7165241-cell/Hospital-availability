@@ -1,15 +1,17 @@
 """
 בודק אם תוכן הגיליון השתנה מאז הבדיקה הקודמת:
   • השתנה  → שולח מיד לוח מעודכן לערוץ (עם כותרת "עדכון בלוח").
-  • לא השתנה, אבל עבר יותר מ-20 שעות מהפוסט האחרון וכבר בוקר → שולח "עדכון יומי"
-    (אישור שהלוח עדיין בתוקף).
+  • לא השתנה, אבל עבר יותר מ-20 שעות מהפוסט האחרון וכבר בוקר → שולח "עדכון יומי".
 המצב נשמר ב-state/board_state.json ומתעדכן ב-repo אחרי כל שליחה.
+
+הסקריפט לעולם לא מפיל את הריצה (exit 0) — כל תקלה נרשמת בסיכום הריצה ב-GitHub.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -39,6 +41,8 @@ def tg(method: str, **params) -> dict:
             return json.loads(body)
         except ValueError:
             return {"ok": False, "error_code": err.code, "description": body}
+    except urllib.error.URLError as err:
+        return {"ok": False, "error_code": 0, "description": f"network: {err.reason}"}
 
 
 def load_state() -> dict:
@@ -50,18 +54,28 @@ def load_state() -> dict:
     return {}
 
 
-def main() -> int:
+def run() -> None:
+    if not os.environ.get("BOT_TOKEN"):
+        board.note("❌ חסר Secret בשם BOT_TOKEN ב-repo.")
+        return
+    if not os.environ.get("CHANNEL_ID"):
+        board.note(
+            "❌ חסר Secret בשם CHANNEL_ID ב-repo. "
+            "Settings ➜ Secrets and variables ➜ Actions ➜ New repository secret, "
+            "בשם CHANNEL_ID ובערך -1004297375221"
+        )
+        return
+
     tz = ZoneInfo(os.environ.get("TZ", "Asia/Jerusalem"))
     now = datetime.now(tz)
 
     raw = board.fetch_csv_sync()
-    current = board.render_board(raw).strip()  # גוף הלוח בלבד, בלי חותמת זמן
+    current = board.render_board(raw).strip()
 
     state = load_state()
     prev = (state.get("board") or "").strip()
     changed = bool(current) and current != prev
 
-    stale = False
     last_post = state.get("last_post")
     if last_post:
         try:
@@ -70,11 +84,11 @@ def main() -> int:
         except ValueError:
             stale = True
     else:
-        stale = True  # ריצה ראשונה — לשלוח פעם אחת ולהתחיל לעקוב
+        stale = True
 
     if not changed and not stale:
-        print(f"no change (local {now:%Y-%m-%d %H:%M})")
-        return 0
+        print(f"אין שינוי ({now:%Y-%m-%d %H:%M})")
+        return
 
     channel = os.environ["CHANNEL_ID"]
     prefix = "🔔 <b>עדכון בלוח הזמינות</b>\n\n" if (changed and prev) else ""
@@ -88,8 +102,17 @@ def main() -> int:
         disable_web_page_preview="true",
     )
     if not res.get("ok"):
-        print("send error:", json.dumps(res, ensure_ascii=False))
-        return 1
+        desc = res.get("description", "")
+        hint = ""
+        if "chat not found" in str(desc):
+            hint = (
+                "\nהבוט לא מוצא את הערוץ — צריך להוסיף את @hospital_availability_bot "
+                "כמנהל בערוץ, או שה-CHANNEL_ID שגוי."
+            )
+        elif "not enough rights" in str(desc) or "CHAT_ADMIN_REQUIRED" in str(desc):
+            hint = "\nלבוט אין הרשאת 'פרסום הודעות' בערוץ."
+        board.note(f"❌ שליחת ההודעה נכשלה: {json.dumps(res, ensure_ascii=False)}{hint}")
+        return
 
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(
@@ -100,7 +123,14 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
-    print("posted:", "change" if changed else "daily", f"({now:%Y-%m-%d %H:%M})")
+    print("נשלח:", "שינוי" if changed else "עדכון יומי", f"({now:%Y-%m-%d %H:%M})")
+
+
+def main() -> int:
+    try:
+        run()
+    except Exception:  # noqa: BLE001
+        board.note("❌ שגיאה ב-watch_sheet:\n```\n" + traceback.format_exc() + "\n```")
     return 0
 
 

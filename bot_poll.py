@@ -63,8 +63,8 @@ def main() -> int:
             print("getUpdates conflict — another bot instance is polling. skipping.")
             return 0
         if code in (401, 404):
-            print("getUpdates auth error:", msg)
-            return 1
+            board.note("❌ בעיית טוקן (BOT_TOKEN): " + msg)
+            return 0
         print("getUpdates transient error (ignored):", msg)
         return 0
 
@@ -100,5 +100,15 @@ def main() -> int:
     return 0
 
 
+def _safe_main() -> int:
+    try:
+        return main()
+    except Exception:  # noqa: BLE001
+        import traceback
+
+        board.note("⚠️ שגיאה ב-bot_poll:\n```\n" + traceback.format_exc() + "\n```")
+        return 0
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_safe_main())
