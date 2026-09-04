@@ -1,7 +1,7 @@
 # איך זה עובד (פרוס ופעיל)
 
 repo: **github.com/7165241-cell/Hospital-availability**
-ערוץ: **"זמינות בתי חולים"** (פרטי, `CHANNEL_ID = -1004297375221`)
+ערוץ: **"זמינות בתי חולים"** (פרטי) — ה-`CHANNEL_ID` המספרי שמור ב-Secret
 בוט: **@hospital_availability_bot**
 
 הכול רץ על השרתים של GitHub — לא צריך מחשב שדולק.

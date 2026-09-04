@@ -61,8 +61,8 @@ def run() -> None:
     if not os.environ.get("CHANNEL_ID"):
         board.note(
             "❌ חסר Secret בשם CHANNEL_ID ב-repo. "
-            "Settings ➜ Secrets and variables ➜ Actions ➜ New repository secret, "
-            "בשם CHANNEL_ID ובערך -1004297375221"
+            "Settings ➜ Secrets and variables ➜ Actions ➜ New repository secret "
+            "(השם: CHANNEL_ID, הערך: מזהה הערוץ המספרי)."
         )
         return
 
