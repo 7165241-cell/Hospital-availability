@@ -48,9 +48,15 @@ jobs:
         continue-on-error: true
         run: |
           git add state/
-          if ! git diff --cached --quiet; then
+          if git diff --cached --quiet; then
+            echo "אין שינוי במצב לשמור" >> "$GITHUB_STEP_SUMMARY"
+          else
             git config user.name "sheet-watcher"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git commit -m "עדכון מצב הגיליון [skip ci]"
-            git push || echo "push נכשל (לא קריטי, ינסה שוב בריצה הבאה)"
+            if git push; then
+              echo "מצב הגיליון נשמר ב-repo" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "⚠️ שמירת המצב ל-repo נכשלה (הרשאות?). Settings ➜ Actions ➜ General ➜ Workflow permissions ➜ Read and write" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi

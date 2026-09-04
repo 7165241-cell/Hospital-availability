@@ -69,8 +69,13 @@ def run() -> None:
     tz = ZoneInfo(os.environ.get("TZ", "Asia/Jerusalem"))
     now = datetime.now(tz)
 
-    raw = board.fetch_csv_sync()
+    try:
+        raw = board.fetch_csv_sync()
+    except Exception as err:  # noqa: BLE001
+        board.note(f"❌ קריאת הגיליון נכשלה: {err}")
+        return
     current = board.render_board(raw).strip()
+    board.note(f"קריאת הגיליון: {len(raw)} תווים ({now:%d/%m %H:%M})")
 
     state = load_state()
     prev = (state.get("board") or "").strip()
@@ -87,7 +92,7 @@ def run() -> None:
         stale = True
 
     if not changed and not stale:
-        print(f"אין שינוי ({now:%Y-%m-%d %H:%M})")
+        board.note(f"אין שינוי בגיליון, ואין צורך בעדכון יומי ({now:%d/%m %H:%M})")
         return
 
     channel = os.environ["CHANNEL_ID"]
@@ -123,7 +128,10 @@ def run() -> None:
         ),
         encoding="utf-8",
     )
-    print("נשלח:", "שינוי" if changed else "עדכון יומי", f"({now:%Y-%m-%d %H:%M})")
+    board.note(
+        ("🔔 נשלח לערוץ: עדכון בלוח" if changed else "✅ נשלח לערוץ: עדכון יומי")
+        + f" ({now:%d/%m %H:%M})"
+    )
 
 
 def main() -> int:
