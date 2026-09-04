@@ -1,9 +1,11 @@
 """
-בודק אם תוכן הגיליון השתנה מאז הבדיקה הקודמת:
-  • השתנה  → שולח מיד לוח מעודכן לערוץ (עם כותרת "עדכון בלוח").
-  • לא השתנה, אבל עבר יותר מ-20 שעות מהפוסט האחרון וכבר בוקר → שולח "עדכון יומי".
-המצב נשמר ב-state/board_state.json ומתעדכן ב-repo אחרי כל שליחה.
+שולח את לוח הזמינות לערוץ במקרים הבאים:
+  • תוכן הגיליון השתנה מאז הבדיקה הקודמת  → שליחה מיידית ("🔔 עדכון בלוח").
+  • הגיע אחד ממועדי השליחה הקבועים (POST_TIMES, ברירת מחדל 07:30 / 15:30 / 23:30
+    שעון ישראל) ועוד לא נשלח באותו מועד היום → שליחת הלוח הנוכחי.
 
+הריצה כל 5 דקות, אז השליחה במועד קבוע מגיעה תוך ~5–15 דקות מהשעה.
+המצב נשמר ב-state/board_state.json ומתעדכן ב-repo אחרי כל שליחה.
 הסקריפט לעולם לא מפיל את הריצה (exit 0) — כל תקלה נרשמת בסיכום הריצה ב-GitHub.
 """
 
@@ -24,8 +26,10 @@ import board
 STATE = Path("state/board_state.json")
 TG = "https://api.telegram.org/bot{token}/{method}"
 
-MORNING_HOUR = int(os.environ.get("DAILY_HOUR", "8"))
-STALE_HOURS = 20
+# מועדי שליחה קבועים לערוץ (שעון ישראל). ניתן לשנות דרך Secret/משתנה POST_TIMES.
+POST_TIMES = os.environ.get("POST_TIMES", "07:30,15:30,23:30")
+# חלון בשעות שבו עדיין שולחים מועד שעבר (אם GitHub עיכב ריצות). המועדים 8 שעות זה מזה.
+SLOT_WINDOW_HOURS = 6
 
 
 def tg(method: str, **params) -> dict:
@@ -52,6 +56,32 @@ def load_state() -> dict:
         except ValueError:
             pass
     return {}
+
+
+def parse_slots(text: str) -> list[tuple[int, int]]:
+    slots = []
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        hh, mm = part.split(":")
+        slots.append((int(hh), int(mm)))
+    return sorted(slots)
+
+
+def due_slot(now: datetime) -> tuple[str, float] | None:
+    """המועד הקבוע האחרון שעבר היום: (מזהה, כמה שעות עברו). None אם אף מועד לא עבר."""
+    passed = []
+    for hh, mm in parse_slots(POST_TIMES):
+        slot_dt = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if slot_dt <= now:
+            passed.append(slot_dt)
+    if not passed:
+        return None
+    slot_dt = max(passed)
+    key = f"{slot_dt:%Y-%m-%d}:{slot_dt:%H%M}"
+    hours_ago = (now - slot_dt).total_seconds() / 3600
+    return key, hours_ago
 
 
 def run() -> None:
@@ -81,18 +111,16 @@ def run() -> None:
     prev = (state.get("board") or "").strip()
     changed = bool(current) and current != prev
 
-    last_post = state.get("last_post")
-    if last_post:
-        try:
-            hrs = (now - datetime.fromisoformat(last_post)).total_seconds() / 3600
-            stale = hrs >= STALE_HOURS and now.hour >= MORNING_HOUR
-        except ValueError:
-            stale = True
-    else:
-        stale = True
+    slot = due_slot(now)
+    slot_key = slot[0] if slot else state.get("last_slot", "")
+    scheduled = bool(slot) and slot[1] <= SLOT_WINDOW_HOURS and state.get("last_slot") != slot[0]
 
-    if not changed and not stale:
-        board.note(f"אין שינוי בגיליון, ואין צורך בעדכון יומי ({now:%d/%m %H:%M})")
+    if not changed and not scheduled:
+        board.note(f"אין שינוי, ואין מועד שליחה פתוח ({now:%d/%m %H:%M})")
+        # עדיין נעדכן את last_slot כדי לא לשלוח מועד ישן מאוחר יותר
+        if slot and state.get("last_slot") != slot[0] and slot[1] > SLOT_WINDOW_HOURS:
+            state["last_slot"] = slot[0]
+            _save(state.get("board", current), state.get("last_post", ""), slot[0])
         return
 
     channel = os.environ["CHANNEL_ID"]
@@ -107,30 +135,34 @@ def run() -> None:
         disable_web_page_preview="true",
     )
     if not res.get("ok"):
-        desc = res.get("description", "")
+        desc = str(res.get("description", ""))
         hint = ""
-        if "chat not found" in str(desc):
+        if "chat not found" in desc:
             hint = (
                 "\nהבוט לא מוצא את הערוץ — צריך להוסיף את @hospital_availability_bot "
                 "כמנהל בערוץ, או שה-CHANNEL_ID שגוי."
             )
-        elif "not enough rights" in str(desc) or "CHAT_ADMIN_REQUIRED" in str(desc):
+        elif "not enough rights" in desc or "CHAT_ADMIN_REQUIRED" in desc:
             hint = "\nלבוט אין הרשאת 'פרסום הודעות' בערוץ."
         board.note(f"❌ שליחת ההודעה נכשלה: {json.dumps(res, ensure_ascii=False)}{hint}")
         return
 
+    _save(current, now.isoformat(timespec="seconds"), slot_key)
+    board.note(
+        ("🔔 נשלח לערוץ: עדכון בלוח" if (changed and prev) else "✅ נשלח לערוץ")
+        + f" ({now:%d/%m %H:%M})"
+    )
+
+
+def _save(board_text: str, last_post: str, last_slot: str) -> None:
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(
         json.dumps(
-            {"board": current, "last_post": now.isoformat(timespec="seconds")},
+            {"board": board_text, "last_post": last_post, "last_slot": last_slot},
             ensure_ascii=False,
             indent=1,
         ),
         encoding="utf-8",
-    )
-    board.note(
-        ("🔔 נשלח לערוץ: עדכון בלוח" if changed else "✅ נשלח לערוץ: עדכון יומי")
-        + f" ({now:%d/%m %H:%M})"
     )
 
 
