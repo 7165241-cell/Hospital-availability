@@ -155,6 +155,5 @@ def build_board_text(raw_csv: str, fetched_at: datetime | None) -> str:
     return (
         '🏥 <b>מד"א ירושלים — לוח זמינות</b>\n'
         f"🕐 עודכן: {stamp}\n\n"
-        f"{render_board(raw_csv)}\n\n"
-        f'<a href="{html.escape(sheet_link())}">↗ פתיחת הגיליון המלא</a>'
+        f"{render_board(raw_csv)}"
     )
