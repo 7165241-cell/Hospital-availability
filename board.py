@@ -147,12 +147,17 @@ def render_board(raw_csv: str) -> str:
     return rendered or "לא נמצאו נתונים בגיליון."
 
 
+def _rtl(text: str) -> str:
+    """סימן RLM בתחילת כל שורה, כדי שטלגרם יציג גם שורות שמתחילות באימוג'י/מספרים/אנגלית מימין לשמאל."""
+    return "\n".join("‏" + line if line else line for line in text.split("\n"))
+
+
 def build_board_text(raw_csv: str, fetched_at: datetime | None) -> str:
     if fetched_at:
         stamp = f"{_HEB_DOW[fetched_at.weekday()]}, {fetched_at:%d/%m}, {fetched_at:%H:%M}"
     else:
         stamp = "—"
-    return (
+    return _rtl(
         '🏥 <b>מד"א ירושלים — לוח זמינות</b>\n'
         f"🕐 עודכן: {stamp}\n\n"
         f"{render_board(raw_csv)}"
